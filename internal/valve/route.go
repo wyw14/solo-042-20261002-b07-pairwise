@@ -74,3 +74,44 @@ func (s *RouteService) Close(ctx context.Context, sessionID uuid.UUID) error {
 	s.mu.Unlock()
 	return nil
 }
+
+func (s *RouteService) IsOpen(sessionID uuid.UUID) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	_, ok := s.open[sessionID]
+	return ok
+}
+
+// EnsureClosed confirms physical isolation before a fault-retained circuit is
+// released: it drives an open route's valve closed and only clears the route
+// once the close command has been accepted. A route that is already closed is
+// a no-op, so recovery can safely be retried. If the valve cannot be closed,
+// the route stays tracked and the fault must remain retained.
+func (s *RouteService) EnsureClosed(ctx context.Context, sessionID uuid.UUID) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	s.mu.Lock()
+	route, ok := s.open[sessionID]
+	s.mu.Unlock()
+	if !ok {
+		return nil
+	}
+	if _, err := s.commands.Close(
+		ctx,
+		route.CloseCommandID,
+		route.SessionID,
+		route.CircuitGeneration,
+		route.ValveID,
+	); err != nil {
+		return err
+	}
+	s.mu.Lock()
+	// Drop the tracking only for the route we actually closed; a route that
+	// was re-opened in the meantime must not be cleared by a stale receipt.
+	if current, ok := s.open[sessionID]; ok && current.CloseCommandID == route.CloseCommandID {
+		delete(s.open, sessionID)
+	}
+	s.mu.Unlock()
+	return nil
+}

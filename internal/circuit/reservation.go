@@ -11,6 +11,7 @@ import (
 var (
 	ErrCircuitBusy         = errors.New("circuit is already reserved")
 	ErrReservationMismatch = errors.New("circuit reservation does not match")
+	ErrCircuitNotFaulted   = errors.New("circuit reservation is not retained after a fault")
 )
 
 type Reservation struct {
@@ -86,6 +87,8 @@ func (m *Manager) RetainFault(circuitID string, sessionID uuid.UUID) error {
 	if !ok || current.SessionID != sessionID {
 		return ErrReservationMismatch
 	}
+	// Idempotent: a re-delivered fault notification for the same retained
+	// reservation must not flip the circuit back into a releasable state.
 	current.Faulted = true
 	m.reservations[circuitID] = current
 	return nil
@@ -97,6 +100,12 @@ func (m *Manager) Recover(circuitID string, sessionID uuid.UUID) error {
 	current, ok := m.reservations[circuitID]
 	if !ok || current.SessionID != sessionID {
 		return ErrReservationMismatch
+	}
+	// Only a circuit retained after an isolation failure may be recovered.
+	// A healthy reservation belongs to a live fill session and must stay
+	// reserved until that session completes or aborts normally.
+	if !current.Faulted {
+		return ErrCircuitNotFaulted
 	}
 	delete(m.reservations, circuitID)
 	return nil

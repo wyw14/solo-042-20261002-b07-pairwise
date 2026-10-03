@@ -47,8 +47,8 @@ func (s *Service) Abort(ctx context.Context, id uuid.UUID, reason string) (model
 	return s.abort.Abort(ctx, id, reason)
 }
 
-func (s *Service) RecoverIsolation(id uuid.UUID) error {
-	return s.abort.RecoverIsolation(id)
+func (s *Service) RecoverIsolation(ctx context.Context, id uuid.UUID) error {
+	return s.abort.RecoverIsolation(ctx, id)
 }
 
 func (s *Service) Get(id uuid.UUID) (model.FillSession, bool) {

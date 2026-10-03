@@ -94,7 +94,7 @@ func (s *Server) recoverFillIsolation(writer http.ResponseWriter, request *http.
 		writeError(writer, http.StatusBadRequest, "invalid session id")
 		return
 	}
-	if err := s.deps.Fills.RecoverIsolation(id); err != nil {
+	if err := s.deps.Fills.RecoverIsolation(request.Context(), id); err != nil {
 		writeError(writer, http.StatusConflict, err.Error())
 		return
 	}

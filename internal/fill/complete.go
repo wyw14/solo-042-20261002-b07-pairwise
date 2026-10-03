@@ -64,7 +64,15 @@ func (s *CompletionService) Complete(ctx context.Context, sessionID uuid.UUID) (
 		return model.FillSession{}, err
 	}
 	if err := s.coordinator.routes.Close(ctx, session.ID); err != nil {
-		_ = s.coordinator.circuits.RetainFault(session.CircuitID, session.ID)
+		// The valve could not be isolated: retain the circuit and mark the
+		// session failed so the fault recovery flow is the only way to
+		// release it. The vessel stays filling and the active entry stays
+		// in place until that recovery succeeds.
+		if retainErr := s.coordinator.circuits.RetainFault(session.CircuitID, session.ID); retainErr != nil {
+			return model.FillSession{}, retainErr
+		}
+		failed := session.Failed("isolation failed after verification: "+err.Error(), s.now())
+		s.coordinator.sessions[session.ID] = failed
 		return model.FillSession{}, err
 	}
 	if err := s.coordinator.circuits.Release(session.CircuitID, session.ID); err != nil {
