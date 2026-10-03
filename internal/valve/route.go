@@ -53,6 +53,13 @@ func (s *RouteService) TrackOpen(route Route) error {
 	return nil
 }
 
+func (s *RouteService) IsOpen(sessionID uuid.UUID) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	_, ok := s.open[sessionID]
+	return ok
+}
+
 func (s *RouteService) Close(ctx context.Context, sessionID uuid.UUID) error {
 	s.mu.Lock()
 	route, ok := s.open[sessionID]

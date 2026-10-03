@@ -94,8 +94,12 @@ func (s *Server) recoverFillIsolation(writer http.ResponseWriter, request *http.
 		writeError(writer, http.StatusBadRequest, "invalid session id")
 		return
 	}
-	if err := s.deps.Fills.RecoverIsolation(id); err != nil {
-		writeError(writer, http.StatusConflict, err.Error())
+	if err := s.deps.Fills.RecoverIsolation(request.Context(), id); err != nil {
+		status := http.StatusConflict
+		if errors.Is(err, fill.ErrPhysicalIsolation) {
+			status = http.StatusServiceUnavailable
+		}
+		writeError(writer, status, err.Error())
 		return
 	}
 	writeJSON(writer, http.StatusOK, map[string]string{"status": "recovered"})
